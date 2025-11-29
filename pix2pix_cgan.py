@@ -4,6 +4,7 @@ import numpy as np
 from IPython.display import clear_output
 import os
 import glob
+from tqdm import tqdm
 
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import (
@@ -25,6 +26,7 @@ from tensorflow.keras.optimizers import Adam
 INPATH = "inputFlowers"
 OUPATH = "targetFlowers"
 CKPATH = "checkpoints"
+OUTPUT_DIR = "output_dir"
 
 # =============================
 # OBTENER LISTA DE ARCHIVOS
@@ -288,8 +290,13 @@ if os.path.exists(CKPATH):
 # =============================
 # GENERAR IMÁGENES
 # =============================
-def generate_images(model, test_input, tar):
+def generate_images(model, test_input, tar, save_filename=False, display_imgs=True):
     prediction = model(test_input, training=False)
+
+    if save_filename:
+        tf.keras.preprocessing.image.save_img(
+            save_filename + ".jpg", prediction[0, ...]
+        )
 
     plt.figure(figsize=(12, 12))
     display_list = [test_input[0], tar[0], prediction[0]]
@@ -336,17 +343,29 @@ def train_step(input_image, target):
 # =============================
 def train(dataset, epochs):
     for epoch in range(epochs):
-        print("Epoch:", epoch)
+        print(f"Epoch {epoch + 1}/{epochs}")
 
-        for input_image, target in dataset:
+        # Mostrar barra de progreso por batch
+        for step, (input_image, target) in enumerate(
+            tqdm(dataset, desc="Training batches")
+        ):
             train_step(input_image, target)
 
+        # Generar imágenes de prueba al final de la epoch
         clear_output(wait=True)
-        for inp, tar in test_dataset.take(1):
-            generate_images(generator, inp, tar)
+        for i, (inp, tar) in enumerate(test_dataset.take(1)):
+            save_name = (
+                f"epoch_{epoch+1}.jpg"  # Nombre del archivo con el número de epoch
+            )
+            generate_images(
+                generator, inp, tar, save_filename=os.path.join(OUTPUT_DIR, save_name)
+            )
 
+        # Guardar checkpoint cada 25 epochs
         if (epoch + 1) % 25 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
+            print(f"Checkpoint guardado en epoch {epoch + 1}")
 
 
+# Entrenar
 train(train_dataset, 5)
