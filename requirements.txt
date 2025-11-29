@@ -1,0 +1,4 @@
+tensorflow>=2.13
+matplotlib>=3.7
+numpy>=1.25
+ipython>=8.15
