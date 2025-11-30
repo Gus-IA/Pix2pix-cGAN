@@ -20,6 +20,7 @@ from tensorflow.keras.layers import (
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 
+
 # =============================
 # RUTAS
 # =============================
@@ -27,6 +28,12 @@ INPATH = "inputFlowers"
 OUPATH = "targetFlowers"
 CKPATH = "checkpoints"
 OUTPUT_DIR = "output_dir"
+
+# Lista de carpetas a crear
+paths = [CKPATH, OUTPUT_DIR]
+
+for p in paths:
+    os.makedirs(p, exist_ok=True)
 
 # =============================
 # OBTENER LISTA DE ARCHIVOS
@@ -64,18 +71,19 @@ def normalize(inimg, tgimg):
 
 
 def random_jitter(inimg, tgimg):
-    inimg, tgimg = resize(inimg, tgimg, 286, 286)
+    # Resize grande solo una vez
+    inimg = tf.image.resize(inimg, [286, 286])
+    tgimg = tf.image.resize(tgimg, [286, 286])
 
-    stacked = tf.stack([inimg, tgimg], axis=0)
-    cropped = tf.image.random_crop(stacked, size=[2, IMG_HEIGHT, IMG_WIDTH, 3])
-
-    inimg, tgimg = cropped[0], cropped[1]
+    # Crop en una sola llamada
+    jittered = tf.image.random_crop(
+        tf.stack([inimg, tgimg], axis=0), size=[2, IMG_HEIGHT, IMG_WIDTH, 3]
+    )
 
     if tf.random.uniform(()) > 0.5:
-        inimg = tf.image.flip_left_right(inimg)
-        tgimg = tf.image.flip_left_right(tgimg)
+        jittered = tf.image.flip_left_right(jittered)
 
-    return inimg, tgimg
+    return jittered[0], jittered[1]
 
 
 def load_image(filename, augment=True):
@@ -109,15 +117,20 @@ plt.show()
 # =============================
 # DATASETS
 # =============================
-train_dataset = tf.data.Dataset.from_tensor_slices(tr_urls)
-train_dataset = train_dataset.map(
-    load_train_image, num_parallel_calls=tf.data.AUTOTUNE
-).batch(1)
+train_dataset = (
+    tf.data.Dataset.from_tensor_slices(tr_urls)
+    .shuffle(512)
+    .map(load_train_image, num_parallel_calls=tf.data.AUTOTUNE)
+    .batch(1)
+    .prefetch(tf.data.AUTOTUNE)
+)
 
-test_dataset = tf.data.Dataset.from_tensor_slices(ts_urls)
-test_dataset = test_dataset.map(
-    load_test_image, num_parallel_calls=tf.data.AUTOTUNE
-).batch(1)
+test_dataset = (
+    tf.data.Dataset.from_tensor_slices(ts_urls)
+    .map(load_test_image, num_parallel_calls=tf.data.AUTOTUNE)
+    .batch(1)
+    .prefetch(tf.data.AUTOTUNE)
+)
 
 
 # =============================
@@ -168,7 +181,7 @@ def upsample(filters, apply_dropout=False):
 
 
 # =============================
-# GENERATOR (CORREGIDO)
+# GENERATOR
 # =============================
 def Generator():
     inputs = Input(shape=[256, 256, 3])
@@ -180,15 +193,11 @@ def Generator():
         downsample(512),
         downsample(512),
         downsample(512),
-        downsample(512),
-        downsample(512),
     ]
 
     up_stack = [
         upsample(512, apply_dropout=True),
         upsample(512, apply_dropout=True),
-        upsample(512, apply_dropout=True),
-        upsample(512),
         upsample(256),
         upsample(128),
         upsample(64),
